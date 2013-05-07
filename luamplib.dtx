@@ -341,46 +341,46 @@ enddef;
 local factor = 65536*(7227/7200)
 
 local function settexboxes (data)
-	local i = tex_count[14] -- newbox register (hardcoded in plain and LaTeX format)
-	for _,c,_ in string_gmatch(data,"(%A)btex(%A.-%A)etex(%A)") do
-		i = i + 1
-		c = string_gsub(c,"^%s*(.-)%s*$","%1")
-		tex_sprint(format("\\setbox%i\\hbox{%s}",i,c))
-	end
+    local i = tex_count[14] -- newbox register (hardcoded in plain and LaTeX format)
+    for _,c,_ in string_gmatch(data,"(%A)btex(%A.-%A)etex(%A)") do
+        i = i + 1
+        c = string_gsub(c,"^%s*(.-)%s*$","%1")
+        tex_sprint(format("\\setbox%i\\hbox{%s}",i,c))
+    end
 end
 luamplib.settexboxes = settexboxes
 
 local function gettexboxes (data)
-	local i = tex_count[14] -- the same newbox register
-	data = string_gsub(data,"(%A)btex%A.-%Aetex(%A)",
-	function(pre,post)
-		i = i + 1
-		local box = tex_box[i]
-		local boxmetr = format("textext(%i,%f,%f,%f)",
-						i,
-						box and (box.width/factor) or 0,
-						box and (box.height/factor) or 0,
-						box and (box.depth/factor) or 0)
-		return pre .. boxmetr .. post
-	end)
-	return mplibcodepreamble .. data
+    local i = tex_count[14] -- the same newbox register
+    data = string_gsub(data,"(%A)btex%A.-%Aetex(%A)",
+    function(pre,post)
+        i = i + 1
+        local box = tex_box[i]
+        local boxmetr = format("textext(%i,%f,%f,%f)",
+            i,
+            box and (box.width/factor) or 0,
+            box and (box.height/factor) or 0,
+            box and (box.depth/factor) or 0)
+		    return pre .. boxmetr .. post
+    end)
+    return mplibcodepreamble .. data
 end
 luamplib.gettexboxes = gettexboxes
 
 local function puttexboxes (object)
-	local n,tw,th = match(object.prescript, "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
-	if n and tw and th then
-		local op = object.path
-		local first, second, fourth = op[1], op[2], op[4]
-		local tx, ty = first.x_coord, first.y_coord
-		local sx, sy = (second.x_coord - tx)/tw, (fourth.y_coord - ty)/th
-		local rx, ry = (second.y_coord - ty)/tw, (fourth.x_coord - tx)/th
-		if sx == 0 then sx = 0.00001 end
-		if sy == 0 then sy = 0.00001 end
-		pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
-		tex_sprint(format("\\mplibputtextbox{%i}",n))
-		pdf_literalcode("Q")
-	end
+    local n,tw,th = match(object.prescript, "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
+    if n and tw and th then
+        local op = object.path
+        local first, second, fourth = op[1], op[2], op[4]
+        local tx, ty = first.x_coord, first.y_coord
+        local sx, sy = (second.x_coord - tx)/tw, (fourth.y_coord - ty)/th
+        local rx, ry = (second.y_coord - ty)/tw, (fourth.x_coord - tx)/th
+        if sx == 0 then sx = 0.00001 end
+        if sy == 0 then sy = 0.00001 end
+        pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
+        tex_sprint(format("\\mplibputtextbox{%i}",n))
+        pdf_literalcode("Q")
+    end
 end
 luamplib.puttexboxes = puttexboxes
 
