@@ -341,7 +341,7 @@ end
 luamplib.gettexboxes = gettexboxes
 
 local function puttexboxes (object)
-	local n,tw,th = string.match(object.prescript, "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
+	local n,tw,th = match(object.prescript, "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
 	if n and tw and th then
 		local op = object.path
 		local first, second, fourth = op[1], op[2], op[4]
@@ -377,7 +377,7 @@ if mplibone then
             find_file = luamplib.finder,
             job_name = file.stripsuffix(name)
         }
-        mpx:execute(string.format("input %s ;",name))
+        mpx:execute(format("input %s ;",name))
         if dump then
             mpx:execute("dump ;")
             info("format %s made and dumped for %s in %0.3f seconds",mem_name,name,os.clock()-t)
@@ -441,7 +441,7 @@ end
 
 luamplib.reporterror = function (result)
     if not result then
-        err("luamplib error: no result object returned")
+        err("no result object returned")
     elseif result.status > 0 then
         local t, e, l = result.term, result.error, result.log
         if t then
