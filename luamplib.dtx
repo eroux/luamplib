@@ -83,18 +83,44 @@ See source file '\inFileName' for licencing and contact information.
 \fi
 %</ignore>
 %<*driver>
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesFile{luaotfload.drv}%
+  [2013/04/16 v2.2 OpenType layout system]%
 \documentclass{ltxdoc}
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{textcomp}
-\usepackage{lmodern}
-\usepackage{metalogo}
-\usepackage{fixltx2e}
+\usepackage{metalogo,multicol,mdwlist,fancyvrb,xspace}
+\usepackage[x11names]{xcolor}
+%
+\def\primarycolor{DodgerBlue4}  %%-> rgb  16  78 139 | #104e8b
+\def\secondarycolor{Goldenrod4} %%-> rgb 139 105 200 | #8b6914
+%
+\usepackage[
+    bookmarks=true,
+   colorlinks=true,
+    linkcolor=\primarycolor,
+     urlcolor=\secondarycolor,
+    citecolor=\primarycolor,
+     pdftitle={The luamplib package},
+   pdfsubject={Interface for using the mplib library},
+    pdfauthor={Hans Hagen, Taco Hoekwater, Elie Roux, Philipp Gesang & Kin Dohyun},
+  pdfkeywords={luatex, lualatex, mplib, metapost}
+]{hyperref}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont[
+  Numbers     = OldStyle,
+  Ligatures   = TeX,
+  BoldFont    = {Linux Libertine O Bold},
+  ItalicFont  = {Linux Libertine O Italic},
+  SlantedFont = {Linux Libertine O Italic},
+]{Linux Libertine O}
+\setmonofont[Ligatures=TeX,Scale=MatchLowercase]{Liberation Mono}
+%setsansfont[Ligatures=TeX]{Linux Biolinum O}
+\setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Iwona Medium}
+%setmathfont{XITS Math}
 
-\usepackage[a4paper]{geometry}
-\usepackage[english]{babel}
-\usepackage[colorlinks]{hyperref}
-\usepackage{bookmark}
+\usepackage{hologo}
+
+\newcommand\ConTeXt {Con\TeX t\xspace}
 
 \newcommand*\email [1] {<\href{mailto:#1}{#1}>}
 \newcommand \file       {\nolinkurl}
@@ -139,7 +165,7 @@ See source file '\inFileName' for licencing and contact information.
 % \section{Documentation}
 %
 % This packages aims at providing a simple way to typeset directly metapost
-% code in a document with Lua\TeX . Lua\TeX\ is built with the lua
+% code in a document with \LuaTeX . \LuaTeX\ is built with the lua
 % \texttt{mplib} library, that runs metapost code. This package is basically a
 % wrapper (in Lua) for the Lua \texttt{mplib} functions and some \TeX\
 % functions to have the output of the \texttt{mplib} functions in the pdf.
@@ -178,7 +204,7 @@ See source file '\inFileName' for licencing and contact information.
 %    \end{macrocode}
 %
 %    Use the |luamplib| namespace, since |mplib| is for the metapost library
-%    itself. \context{} uses |metapost|.
+%    itself. \ConTeXt\ uses |metapost|.
 %
 %    \begin{macrocode}
 luamplib          = luamplib or { } --- HH has: metapost
@@ -188,7 +214,7 @@ luamplib.lastlog  = ""
 %    \end{macrocode}
 %
 %    We need to explicitely include some libraries as they won't be loaded by
-%    default in future \luatex{}.
+%    default in future \LuaTeX{}.
 %
 %    \begin{macrocode}
 local mplib = require ('mplib')
@@ -315,7 +341,7 @@ enddef;
 local factor = 65536*(7227/7200)
 
 local function settexboxes (data)
-	local i = tex_count[14] -- newbox register
+	local i = tex_count[14] -- newbox register (hardcoded in plain and LaTeX format)
 	for _,c,_ in string_gmatch(data,"(%A)btex(%A.-%A)etex(%A)") do
 		i = i + 1
 		c = string_gsub(c,"^%s*(.-)%s*$","%1")
@@ -361,8 +387,8 @@ luamplib.puttexboxes = puttexboxes
 %    \end{macrocode}
 %
 %    The rest of this module is not documented. More information can be found
-%    in the Lua\TeX\ manual, articles in user group journals and the files
-%    that ship with Con\TeX t.
+%    in the \LuaTeX\ manual, articles in user group journals and the files
+%    that ship with \ConTeXt .
 %
 %    Below included is section that defines fallbacks for older versions of 
 %    mplib.
@@ -499,9 +525,13 @@ local function convert(result, flusher)
     return true -- done
 end
 luamplib.convert = convert
-
+%    \end{macrocode}
+%
+%    Some formats here have been passed by Kim from |%s| to |%f|.
+%
+%    \begin{macrocode}
 local function pdf_startfigure(n,llx,lly,urx,ury)
-    tex_sprint(format("\\mplibstarttoPDF{%s}{%s}{%s}{%s}",llx,lly,urx,ury))
+    tex_sprint(format("\\mplibstarttoPDF{%f}{%f}{%f}{%f}",llx,lly,urx,ury))
 end
 
 local function pdf_stopfigure()
@@ -515,7 +545,7 @@ luamplib.pdf_literalcode = pdf_literalcode
 
 local function pdf_textfigure(font,size,text,width,height,depth)
     text = text:gsub(".","\\hbox{%1}") -- kerning happens in metapost
-    tex_sprint(format("\\mplibtextext{%s}{%s}{%s}{%s}{%s}",font,size,text,0,-( 7200/ 7227)/65536*depth))
+    tex_sprint(format("\\mplibtextext{%s}{%f}{%s}{%s}{%f}",font,size,text,0,-( 7200/ 7227)/65536*depth))
 end
 luamplib.pdf_textfigure = pdf_textfigure
 
@@ -629,7 +659,15 @@ local function flush(result,flusher)
                         for o=1,#objects do
                             local object = objects[o]
                             local objecttype = object.type
-                            if objecttype == "start_bounds" or objecttype == "stop_bounds" then
+                            local prescript = object.prescript
+%    \end{macrocode}
+%
+%    The three following lines are for btex...etex, by Kim.
+%
+%    \begin{macrocode}
+                            if prescript and string.find(prescript,"%%%%textext:") then
+                                puttexboxes(object)
+                            elseif objecttype == "start_bounds" or objecttype == "stop_bounds" then
                                 -- skip
                             elseif objecttype == "start_clip" then
                                 pdf_literalcode("q")
@@ -647,8 +685,17 @@ local function flush(result,flusher)
                                 pdf_literalcode("Q")
                             else
                                 local cs = object.color
+                                local cr = nil
                                 if cs and #cs > 0 then
-                                    pdf_literalcode(luamplib.colorconverter(cs))
+%    \end{macrocode}
+%
+%    The three following lines are for btex...etex, by Kim (does the cr thing
+%    really do something?)
+%
+%    \begin{macrocode}
+                                    local start,stop = luamplib.colorconverter(cs)
+                                    pdf_literalcode(start)
+                                    cr = stop
                                 end
                                 local ml = object.miterlimit
                                 if ml and ml ~= miterlimit then
