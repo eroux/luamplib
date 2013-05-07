@@ -377,9 +377,9 @@ local function puttexboxes (object)
         local rx, ry = (second.y_coord - ty)/tw, (fourth.x_coord - tx)/th
         if sx == 0 then sx = 0.00001 end
         if sy == 0 then sy = 0.00001 end
-        pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
+        luamplib.pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
         tex_sprint(format("\\mplibputtextbox{%i}",n))
-        pdf_literalcode("Q")
+        luamplib.pdf_literalcode("Q")
     end
 end
 luamplib.puttexboxes = puttexboxes
@@ -940,30 +940,36 @@ luamplib.colorconverter = colorconverter
 %    The \LaTeX\ environment is a modified \texttt{verbatim} environment.
 %
 %    \begin{macrocode}
-%\newenvironment{mplibcode}{%
-%  \VerbatimEnvironment %
-%  \begin{SaveVerbatim}{memoire}%
-%}{%
-%  \end{SaveVerbatim}%
-%  \mplibaddlines{memoire}%
-%  \directlua{luamplib.processlines()}%
-%}
+\newenvironment{mplibcode}{%
+  \VerbatimEnvironment %
+  \begin{SaveVerbatim}{memoire}%
+}{%
+  \end{SaveVerbatim}%
+  \mplibaddlines{memoire}%
+  \directlua{luamplib.processlines()}%
+}
 
-  \newenvironment{mplibcode}{\toks@{}\ltxdomplibcode}{}
-  \def\ltxdomplibcode{\bgroup\mplibsetupcatcodes\ltxdomplibcodeX}
-  \long\def\ltxdomplibcodeX#1\end{%
-    \egroup
-    \toks@\expandafter{\the\toks@#1}\ltxdomplibcodeXX}
-    \def\ltxdomplibcodeXX#1{%
-      \ifnum\pdf@strcmp{#1}{mplibcode}=\z@
-	\directlua{luamplib.settexboxes([===[\the\toks@]===])}
-	\directlua{local data = luamplib.gettexboxes([===[\the\toks@]===])
-		   luamplib.process(data)}\end{mplibcode}%
-      \else
-	\toks@\expandafter{\the\toks@\end{#1}}\expandafter\ltxdomplibcode
-      \fi}
+%  \newenvironment{mplibcode}{\toks@{}\ltxdomplibcode}{}
+%  \def\ltxdomplibcode{\bgroup\mplibsetupcatcodes\ltxdomplibcodeX}
+%  \long\def\ltxdomplibcodeX#1\end{%
+%    \egroup
+%    \toks@\expandafter{\the\toks@#1}\ltxdomplibcodeXX}
+%    \def\ltxdomplibcodeXX#1{%
+%      \ifnum\pdf@strcmp{#1}{mplibcode}=\z@
+%	\directlua{luamplib.settexboxes([===[\the\toks@]===])}
+%	\directlua{local data = luamplib.gettexboxes([===[\the\toks@]===])
+%		   luamplib.process(data)}\end{mplibcode}%
+%      \else
+%	\toks@\expandafter{\the\toks@\end{#1}}\expandafter\ltxdomplibcode
+%      \fi}
 
 \fi
+%    \end{macrocode}
+%
+%    A new function (by Kim).
+%
+%    \begin{macrocode}
+\def\mplibputtextbox#1{\vbox to 0pt{\vss\hbox to 0pt{\raise\dp#1\box#1\hss}}}
 %    \end{macrocode}
 %
 %    We use a dedicated scratchbox.
