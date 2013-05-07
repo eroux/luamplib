@@ -204,7 +204,6 @@ local err, warn, info, log = luatexbase.provides_module({
     date          = "2013/05/09",
     description   = "Lua package to typeset Metapost with LuaTeX's MPLib.",
 })
-luamplib.report = info --- <- metapost.report
 %    \end{macrocode}
 %
 %    A few helpers, taken from |l-file.lua|.
@@ -223,6 +222,7 @@ if not file then
 end
 
 local format, concat, abs, match = string.format, table.concat, math.abs, string.match
+local tex_sprint = tex.sprint
 
 %    \end{macrocode}
 %
@@ -315,9 +315,9 @@ if mplibone then
         mpx:execute(string.format("input %s ;",name))
         if dump then
             mpx:execute("dump ;")
-            luamplib.report("format %s made and dumped for %s in %0.3f seconds",mem_name,name,os.clock()-t)
+            info("format %s made and dumped for %s in %0.3f seconds",mem_name,name,os.clock()-t)
         else
-            luamplib.report("%s read in %0.3f seconds",name,os.clock()-t)
+            info("%s read in %0.3f seconds",name,os.clock()-t)
         end
         return mpx
     end
@@ -334,7 +334,7 @@ if mplibone then
             mpx = luamplib.make(name,mem_name)
         end
         if mpx then
-            luamplib.report("using format %s",mem_name,false)
+            info("using format %s",mem_name,false)
             return mpx, nil
         else
             return nil, { status = 99, error = "out of memory or invalid format" }
@@ -376,20 +376,20 @@ end
 
 luamplib.reporterror = function (result)
     if not result then
-        luamplib.report("luamplib error: no result object returned")
+        err("luamplib error: no result object returned")
     elseif result.status > 0 then
         local t, e, l = result.term, result.error, result.log
         if t then
-            luamplib.report("luamplib terminal: %s",t)
+            info(t)
         end
         if e then
-            luamplib.report("luamplib error: %s", e)
+            err(e)
         end
         if not t and not e and l then
             luamplib.lastlog = luamplib.lastlog .. "\n " .. l
-            luamplib.report("luamplib log: %s",l)
+            log(l)
         else
-            luamplib.report("luamplib error: unknown, no error, terminal or log messages")
+            err("unknown, no error, terminal or log messages")
         end
     else
         return false
@@ -403,19 +403,19 @@ local function process_indeed (mpx, data)
     if mpx and data then
         local result = mpx:execute(data)
         if not result then
-            luamplib.report("mp error: no result object returned")
+            err("no result object returned")
         elseif result.status > 0 then
-            luamplib.report("mp error: %s",(result.term or "no-term") .. "\n" .. (result.error or "no-error"))
+            err("%s",(result.term or "no-term") .. "\n" .. (result.error or "no-error"))
         elseif luamplib.showlog then
             luamplib.lastlog = luamplib.lastlog .. "\n" .. result.term
-            luamplib.report("mp info: %s",result.term or "no-term")
+            info("%s",result.term or "no-term")
         elseif result.fig then
             converted = luamplib.convert(result)
         else
-            luamplib.report("mp error: unknown error, maybe no beginfig/endfig")
+            err("unknown error, maybe no beginfig/endfig")
         end
     else
-        luamplib.report("luamplib error: Mem file unloadable. Maybe generated with a different version of mplib?")
+        err("Mem file unloadable. Maybe generated with a different version of mplib?")
     end
     return converted, result
 end
@@ -435,21 +435,21 @@ end
 luamplib.convert = convert
 
 local function pdf_startfigure(n,llx,lly,urx,ury)
-    tex.sprint(format("\\mplibstarttoPDF{%s}{%s}{%s}{%s}",llx,lly,urx,ury))
+    tex_sprint(format("\\mplibstarttoPDF{%s}{%s}{%s}{%s}",llx,lly,urx,ury))
 end
 
 local function pdf_stopfigure()
-    tex.sprint("\\mplibstoptoPDF")
+    tex_sprint("\\mplibstoptoPDF")
 end
 
 local function pdf_literalcode(fmt,...) -- table
-    tex.sprint(format("\\mplibtoPDF{%s}",format(fmt,...)))
+    tex_sprint(format("\\mplibtoPDF{%s}",format(fmt,...)))
 end
 luamplib.pdf_literalcode = pdf_literalcode
 
 local function pdf_textfigure(font,size,text,width,height,depth)
     text = text:gsub(".","\\hbox{%1}") -- kerning happens in metapost
-    tex.sprint(format("\\mplibtextext{%s}{%s}{%s}{%s}{%s}",font,size,text,0,-( 7200/ 7227)/65536*depth))
+    tex_sprint(format("\\mplibtextext{%s}{%s}{%s}{%s}{%s}",font,size,text,0,-( 7200/ 7227)/65536*depth))
 end
 luamplib.pdf_textfigure = pdf_textfigure
 
@@ -545,7 +545,7 @@ local function flush(result,flusher)
         local figures = result.fig
         if figures then
             for f=1, #figures do
-                luamplib.report("flushing figure %s",f)
+                info("flushing figure %s",f)
                 local figure = figures[f]
                 local objects = getobjects(result,figure,f)
                 local fignum = tonumber(match(figure:filename(),"([%d]+)$") or figure:charcode() or 0)
