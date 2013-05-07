@@ -124,10 +124,10 @@ See source file '\inFileName' for licencing and contact information.
 %   Right brace   \}     Tilde         \~}
 %
 % \title{The \textsf{luamplib} package}
-% \author{Hans Hagen, Taco Hoekwater and Elie Roux \\
-% Maintainer: Manuel Pégourié-Gonnard ---
+% \author{Hans Hagen, Taco Hoekwater, Elie Roux and Philipp Gesang\\
+% Maintainer: LuaLaTeX Maintainers ---
 % Support: \email{lualatex-dev@tug.org}}
-% \date{2011/12/09 v1.09}
+% \date{2013/05/09 v2.0}
 %
 % \maketitle
 %
@@ -149,8 +149,8 @@ See source file '\inFileName' for licencing and contact information.
 % The metapost figures are put in a \TeX\ \texttt{hbox} with dimensions
 % adjusted to the metapost code.
 %
-% The code is from the \texttt{supp-mpl.lua} and \texttt{supp-mpl.tex} files
-% from Con\TeX t, they have been adapted to \LaTeX\ and Plain by Elie Roux.
+% The code is from the \texttt{luatex-mplib.lua} and \texttt{luatex-mplib.tex} files
+% from Con\TeX t, they have been adapted to \LaTeX\ and Plain by the authors.
 % The changes are:
 %
 % \begin{itemize}
@@ -177,10 +177,21 @@ See source file '\inFileName' for licencing and contact information.
 %    \end{macrocode}
 %
 %    Use the |luamplib| namespace, since |mplib| is for the metapost library
-%    itself.
+%    itself. \context{} uses |metapost|.
 %
 %    \begin{macrocode}
-module('luamplib', package.seeall)
+luamplib          = luamplib or { } --- HH has: metapost
+local luamplib    = luamplib
+luamplib.showlog  = luamplib.showlog or false
+luamplib.lastlog  = ""
+%    \end{macrocode}
+%
+%    We need to explicitely include some libraries as they won't be loaded by
+%    default in future \luatex{}.
+%
+%    \begin{macrocode}
+local mplib = require ('mplib')
+local kpse  = require ('kpse')
 %    \end{macrocode}
 %
 %    Identification, and additional reporting function, for compatibility with
@@ -189,22 +200,29 @@ module('luamplib', package.seeall)
 %    \begin{macrocode}
 local err, warn, info, log = luatexbase.provides_module({
     name          = "luamplib",
-    version       =  1.09,
-    date          = "2011/11/09",
+    version       =  2.00,
+    date          = "2013/05/09",
     description   = "Lua package to typeset Metapost with LuaTeX's MPLib.",
 })
-
-local function term(...)
-    texio.write_nl('term', 'luamplib: ' .. string.format(...))
-end
-
+luamplib.report = info --- <- metapost.report
 %    \end{macrocode}
 %
-%    This module is a stripped down version of libraries that are used by
-%    Con\TeX t. Provide a few ``shortcuts'' expected by the imported code.
+%    A few helpers, taken from |l-file.lua|.
 %
 %    \begin{macrocode}
-local format, concat, abs = string.format, table.concat, math.abs
+local file = file
+if not file then
+  file = { }
+  function file.replacesuffix(filename, suffix)
+      return (string.gsub(filename,"%.[%a%d]+$","")) .. "." .. suffix
+  end
+
+  function file.stripsuffix(filename)
+      return (string.gsub(filename,"%.[%a%d]+$",""))
+  end
+end
+
+local format, concat, abs, match = string.format, table.concat, math.abs, string.match
 
 %    \end{macrocode}
 %
@@ -218,14 +236,16 @@ local data = ""
 local function resetdata()
     data = ""
 end
-function addline(line)
+luamplib.resetdata = resetdata
+local function addline(line)
     data = data .. '\n' .. line
 end
-function processlines()
-    process(data)
+luamplib.addline = addline
+local function processlines()
+    luamplib.process(data)
     resetdata()
 end
-
+luamplib.processlines = processlines
 %    \end{macrocode}
 %
 %    As the finder function for |mplib|, use the |kpse| library and
@@ -242,7 +262,7 @@ local function finder(name, mode, ftype)
         return mpkpse:find_file(name,ftype)
     end
 end
-
+luamplib.finder = finder
 %    \end{macrocode}
 %
 %    Default format name, and a public function to change it.
@@ -250,10 +270,10 @@ end
 %    \begin{macrocode}
 local currentformat = "plain"
 
-function setformat (name)
+local function setformat (name) --- used in .sty
     currentformat = name
 end
-
+luamplib.setformat = setformat
 %    \end{macrocode}
 %
 %    Create a new mplib object and input the correct .mp file as given by
@@ -272,71 +292,147 @@ function load()
     mpx:execute(format("input %s ;", currentformat))
     return mpx
 end
-
 %    \end{macrocode}
 %
 %    The rest of this module is not documented. More information can be found
 %    in the Lua\TeX\ manual, articles in user group journals and the files
 %    that ship with Con\TeX t.
 %
+%    Below included is section that defines fallbacks for older versions of 
+%    mplib.
+%
 %    \begin{macrocode}
-function report(result)
-    if not result then
-        err("no result object")
-    elseif result.status > 0 then
-        local t, e, l, f = result.term, result.error, result.log
-        if l then
-            log(l)
+local mplibone = tonumber(mplib.version()) <= 1.50
+if mplibone then
+
+    luamplib.make = luamplib.make or function(name,mem_name,dump)
+        local t = os.clock()
+        local mpx = mplib.new {
+            ini_version = true,
+            find_file = luamplib.finder,
+            job_name = file.stripsuffix(name)
+        }
+        mpx:execute(string.format("input %s ;",name))
+        if dump then
+            mpx:execute("dump ;")
+            luamplib.report("format %s made and dumped for %s in %0.3f seconds",mem_name,name,os.clock()-t)
+        else
+            luamplib.report("%s read in %0.3f seconds",name,os.clock()-t)
         end
-        if t then
-            term(t)
-        end
-        if e then
-            if result.status == 1 then
-                warn(e)
-            else
-                err(e)
-            end
-        end
-        if not t and not e and not l then
-            if result.status == 1 then
-                warn("unknown error, no error, terminal or log messages, maybe missing beginfig/endfig")
-            else
-                err("unknown error, no error, terminal or log messages, maybe missing beginfig/endfig")
-            end
-        end
-    else
-        return true
+        return mpx
     end
-    return false
+
+    function luamplib.load(name)
+        local mem_name = file.replacesuffix(name,"mem")
+        local mpx = mplib.new {
+            ini_version = false,
+            mem_name = mem_name,
+            find_file = luamplib.finder
+        }
+        if not mpx and type(luamplib.make) == "function" then
+            -- when i have time i'll locate the format and dump
+            mpx = luamplib.make(name,mem_name)
+        end
+        if mpx then
+            luamplib.report("using format %s",mem_name,false)
+            return mpx, nil
+        else
+            return nil, { status = 99, error = "out of memory or invalid format" }
+        end
+    end
+
+else
+%    \end{macrocode}
+%
+%    These are the versions called with sufficiently recent mplib.
+%
+%    \begin{macrocode}
+
+    local preamble = [[
+        boolean mplib ; mplib := true ;
+        let dump = endinput ;
+        input %s ;
+    ]]
+
+    luamplib.make = luamplib.make or function()
+    end
+
+    function luamplib.load(name)
+        local mpx = mplib.new {
+            ini_version = true,
+            find_file = luamplib.finder,
+        }
+        local result
+        if not mpx then
+            result = { status = 99, error = "out of memory"}
+        else
+            result = mpx:execute(format(preamble, file.replacesuffix(name,"mp")))
+        end
+        luamplib.reporterror(result)
+        return mpx, result
+    end
+
 end
 
-function process(data)
-    local converted, result = false, {}
-    local mpx = load()
-    if mpx and data then
-        local result = mpx:execute(data)
-        if report(result) then
-            if result.fig then
-                converted = convert(result)
-            else
-                warn("no figure output")
-            end
+luamplib.reporterror = function (result)
+    if not result then
+        luamplib.report("luamplib error: no result object returned")
+    elseif result.status > 0 then
+        local t, e, l = result.term, result.error, result.log
+        if t then
+            luamplib.report("luamplib terminal: %s",t)
+        end
+        if e then
+            luamplib.report("luamplib error: %s", e)
+        end
+        if not t and not e and l then
+            luamplib.lastlog = luamplib.lastlog .. "\n " .. l
+            luamplib.report("luamplib log: %s",l)
+        else
+            luamplib.report("luamplib error: unknown, no error, terminal or log messages")
         end
     else
-        err("Mem file unloadable. Maybe generated with a different version of mplib?")
+        return false
+    end
+    return true
+end
+
+local function process_indeed (mpx, data)
+    local converted, result = false, {}
+    local mpx = luamplib.load(mpx)
+    if mpx and data then
+        local result = mpx:execute(data)
+        if not result then
+            luamplib.report("mp error: no result object returned")
+        elseif result.status > 0 then
+            luamplib.report("mp error: %s",(result.term or "no-term") .. "\n" .. (result.error or "no-error"))
+        elseif luamplib.showlog then
+            luamplib.lastlog = luamplib.lastlog .. "\n" .. result.term
+            luamplib.report("mp info: %s",result.term or "no-term")
+        elseif result.fig then
+            converted = luamplib.convert(result)
+        else
+            luamplib.report("mp error: unknown error, maybe no beginfig/endfig")
+        end
+    else
+        luamplib.report("luamplib error: Mem file unloadable. Maybe generated with a different version of mplib?")
     end
     return converted, result
 end
+local process = function (data)
+    return process_indeed(currentformat, data)
+end
+luamplib.process = process
 
 local function getobjects(result,figure,f)
     return figure:objects()
 end
 
-function convert(result, flusher)
-    flush(result, flusher)
+local function convert(result, flusher)
+    luamplib.flush(result, flusher)
     return true -- done
 end
+luamplib.convert = convert
 
 local function pdf_startfigure(n,llx,lly,urx,ury)
     tex.sprint(format("\\mplibstarttoPDF{%s}{%s}{%s}{%s}",llx,lly,urx,ury))
@@ -346,29 +442,26 @@ local function pdf_stopfigure()
     tex.sprint("\\mplibstoptoPDF")
 end
 
-function pdf_literalcode(fmt,...) -- table
+local function pdf_literalcode(fmt,...) -- table
     tex.sprint(format("\\mplibtoPDF{%s}",format(fmt,...)))
 end
+luamplib.pdf_literalcode = pdf_literalcode
 
-function pdf_textfigure(font,size,text,width,height,depth)
+local function pdf_textfigure(font,size,text,width,height,depth)
     text = text:gsub(".","\\hbox{%1}") -- kerning happens in metapost
     tex.sprint(format("\\mplibtextext{%s}{%s}{%s}{%s}{%s}",font,size,text,0,-( 7200/ 7227)/65536*depth))
 end
+luamplib.pdf_textfigure = pdf_textfigure
 
 local bend_tolerance = 131/65536
 
 local rx, sx, sy, ry, tx, ty, divider = 1, 0, 0, 1, 0, 0, 1
 
 local function pen_characteristics(object)
-    if mplib.pen_info then
-        local t = mplib.pen_info(object)
-        rx, ry, sx, sy, tx, ty = t.rx, t.ry, t.sx, t.sy, t.tx, t.ty
-        divider = sx*sy - rx*ry
-        return not (sx==1 and rx==0 and ry==0 and sy==1 and tx==0 and ty==0), t.width
-    else
-        rx, sx, sy, ry, tx, ty, divider = 1, 0, 0, 1, 0, 0, 1
-        return false, 1
-    end
+    local t = mplib.pen_info(object)
+    rx, ry, sx, sy, tx, ty = t.rx, t.ry, t.sx, t.sy, t.tx, t.ty
+    divider = sx*sy - rx*ry
+    return not (sx==1 and rx==0 and ry==0 and sy==1 and tx==0 and ty==0), t.width
 end
 
 local function concat(px, py) -- no tx, ty here
@@ -447,20 +540,15 @@ local function flushconcatpath(path,open)
     return t
 end
 
-%    \end{macrocode}
-%
-%    Support for specials in DVI has been removed.
-%
-%    \begin{macrocode}
-function flush(result,flusher)
+local function flush(result,flusher)
     if result then
         local figures = result.fig
         if figures then
             for f=1, #figures do
-                log("flushing figure %s",f)
+                luamplib.report("flushing figure %s",f)
                 local figure = figures[f]
                 local objects = getobjects(result,figure,f)
-                local fignum = tonumber((figure:filename()):match("([%d]+)$") or figure:charcode() or 0)
+                local fignum = tonumber(match(figure:filename(),"([%d]+)$") or figure:charcode() or 0)
                 local miterlimit, linecap, linejoin, dashed = -1, -1, -1, false
                 local bbox = figure:boundingbox()
                 local llx, lly, urx, ury = bbox[1], bbox[2], bbox[3], bbox[4] -- faster than unpack
@@ -494,7 +582,7 @@ function flush(result,flusher)
                             else
                                 local cs = object.color
                                 if cs and #cs > 0 then
-                                    pdf_literalcode(colorconverter(cs))
+                                    pdf_literalcode(luamplib.colorconverter(cs))
                                 end
                                 local ml = object.miterlimit
                                 if ml and ml ~= miterlimit then
@@ -591,8 +679,9 @@ function flush(result,flusher)
         end
     end
 end
+luamplib.flush = flush
 
-function colorconverter(cr)
+local function colorconverter(cr)
     local n = #cr
     if n == 4 then
         local c, m, y, k = cr[1], cr[2], cr[3], cr[4]
@@ -605,6 +694,7 @@ function colorconverter(cr)
         return format("%.3f g %.3f G",s,s), "0 g 0 G"
     end
 end
+luamplib.colorconverter = colorconverter
 %    \end{macrocode}
 %
 %    \begin{macrocode}
@@ -670,8 +760,15 @@ end
 \bgroup\expandafter\expandafter\expandafter\egroup
 \expandafter\ifx\csname ProvidesPackage\endcsname\relax
 \def\mplibsetupcatcodes{%
-  \catcode`\{=12 \catcode`\}=12 \catcode`\#=12 \catcode`\^=12 \catcode`\~=12
-  \catcode`\_=12 \catcode`\%=12 \catcode`\&=12 \catcode`\$=12
+  \catcode`\{=12 % could be optional .. not really needed
+  \catcode`\}=12 % could be optional .. not really needed
+  \catcode`\#=12 %
+  \catcode`\^=12 %
+  \catcode`\~=12 %
+  \catcode`\_=12 %
+  %\catcode`\%=12 %% please look into this! /phg
+  \catcode`\&=12 %
+  \catcode`\$=12 %
 }
 \def\mplibcode{%
   \bgroup %
