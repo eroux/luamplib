@@ -1,11 +1,11 @@
 % \iffalse meta-comment -- by the way, this file contains UTF-8
 %
-% Copyright (C) 2008-2010 by Hans Hagen, Taco Hoekwater, Elie Roux, and
-% Manuel Pégourié-Gonnard.
-% Currently maintained by Manuel Pégourié-Gonnard <mpg@elzevir.fr>
+% Copyright (C) 2008-2010 by Hans Hagen, Taco Hoekwater, Elie Roux, 
+% Manuel Pégourié-Gonnard, Philipp Gesang and Kim Dohyun.
+% Currently maintained by the LuaLaTeX development team.
 % Support: <lualatex-dev@tug.org>
 %
-% This work is under the CC0 license.
+% This work is under the GPL v2.0 license.
 %
 % This work consists of the main source file luamplib.dtx
 % and the derived files
@@ -124,7 +124,7 @@ See source file '\inFileName' for licencing and contact information.
 %   Right brace   \}     Tilde         \~}
 %
 % \title{The \textsf{luamplib} package}
-% \author{Hans Hagen, Taco Hoekwater, Elie Roux and Philipp Gesang\\
+% \author{Hans Hagen, Taco Hoekwater, Elie Roux, Philipp Gesang and Kim Dohyun\\
 % Maintainer: LuaLaTeX Maintainers ---
 % Support: \email{lualatex-dev@tug.org}}
 % \date{2013/05/09 v2.0}
@@ -824,8 +824,6 @@ luamplib.colorconverter = colorconverter
 %    The Plain-specific stuff.
 %
 %    \begin{macrocode}
-\bgroup\expandafter\expandafter\expandafter\egroup
-\expandafter\ifx\csname ProvidesPackage\endcsname\relax
 \def\mplibsetupcatcodes{%
   \catcode`\{=12 % could be optional .. not really needed
   \catcode`\}=12 % could be optional .. not really needed
@@ -837,6 +835,9 @@ luamplib.colorconverter = colorconverter
   \catcode`\&=12 %
   \catcode`\$=12 %
 }
+\bgroup\expandafter\expandafter\expandafter\egroup
+\expandafter\ifx\csname ProvidesPackage\endcsname\relax
+
 \def\mplibcode{%
   \bgroup %
   \mplibsetupcatcodes %
@@ -891,14 +892,28 @@ luamplib.colorconverter = colorconverter
 %    The \LaTeX\ environment is a modified \texttt{verbatim} environment.
 %
 %    \begin{macrocode}
-\newenvironment{mplibcode}{%
-  \VerbatimEnvironment %
-  \begin{SaveVerbatim}{memoire}%
-}{%
-  \end{SaveVerbatim}%
-  \mplibaddlines{memoire}%
-  \directlua{luamplib.processlines()}%
-}
+%\newenvironment{mplibcode}{%
+%  \VerbatimEnvironment %
+%  \begin{SaveVerbatim}{memoire}%
+%}{%
+%  \end{SaveVerbatim}%
+%  \mplibaddlines{memoire}%
+%  \directlua{luamplib.processlines()}%
+%}
+
+  \newenvironment{mplibcode}{\toks@{}\ltxdomplibcode}{}
+  \def\ltxdomplibcode{\bgroup\mplibsetupcatcodes\ltxdomplibcodeX}
+  \long\def\ltxdomplibcodeX#1\end{%
+    \egroup
+    \toks@\expandafter{\the\toks@#1}\ltxdomplibcodeXX}
+    \def\ltxdomplibcodeXX#1{%
+      \ifnum\pdf@strcmp{#1}{mplibcode}=\z@
+	\directlua{luamplib.settexboxes([===[\the\toks@]===])}
+	\directlua{local data = luamplib.gettexboxes([===[\the\toks@]===])
+		   luamplib.process(data)}\end{mplibcode}%
+      \else
+	\toks@\expandafter{\the\toks@\end{#1}}\expandafter\ltxdomplibcode
+      \fi}
 
 \fi
 %    \end{macrocode}
