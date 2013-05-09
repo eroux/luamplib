@@ -154,12 +154,12 @@ See source file '\inFileName' for licencing and contact information.
 % \author{Hans Hagen, Taco Hoekwater, Elie Roux, Philipp Gesang and Kim Dohyun\\
 % Maintainer: LuaLaTeX Maintainers ---
 % Support: \email{lualatex-dev@tug.org}}
-% \date{2013/05/09 v2.0}
+% \date{2013/05/07 v2.0}
 %
 % \maketitle
 %
 % \begin{abstract}
-% Package to have metapost code typeset directly in a document with \LuaTeX .
+% Package to have metapost code typeset directly in a document with Lua\TeX .
 % \end{abstract}
 %
 % \section{Documentation}
@@ -177,13 +177,15 @@ See source file '\inFileName' for licencing and contact information.
 % adjusted to the metapost code.
 %
 % The code is from the \texttt{luatex-mplib.lua} and \texttt{luatex-mplib.tex} files
-% from Con\TeX t, they have been adapted to \LaTeX\ and Plain by the authors.
+% from \ConTeXt, they have been adapted to \LaTeX\ and Plain by Elie Roux and
+% Philipp Gesang, new functionalities have been added by Kil Dohyun.
 % The changes are:
 %
 % \begin{itemize}
 % \item a \LaTeX\ environment
 % \item all \TeX\ macros start by \texttt{mplib}
 % \item use of luatexbase for errors, warnings and declaration
+% \item possibility to use |btex ... etex| to typeset \TeX .
 % \end{itemize}
 %
 % Using this package is easy: in Plain, type your metapost code between the
@@ -199,90 +201,80 @@ See source file '\inFileName' for licencing and contact information.
 %
 %    \subsection{Lua module}
 %
-%    \begin{macrocode}
+% \iffalse
 %<*lua>
-%    \end{macrocode}
-%
+% \fi
 %    Use the |luamplib| namespace, since |mplib| is for the metapost library
-%    itself. \ConTeXt\ uses |metapost|.
+%    itself. \ConTeXt{} uses |metapost|.
 %
 %    \begin{macrocode}
-luamplib          = luamplib or { } --- HH has: metapost
+
+luamplib          = luamplib or { }
+
+%    \end{macrocode}
+%    Identification.
+%
+%    \begin{macrocode}
+
 local luamplib    = luamplib
 luamplib.showlog  = luamplib.showlog or false
 luamplib.lastlog  = ""
-%    \end{macrocode}
-%
-%    We need to explicitely include some libraries as they won't be loaded by
-%    default in future \LuaTeX{}.
-%
-%    \begin{macrocode}
-local mplib = require ('mplib')
-local kpse  = require ('kpse')
-%    \end{macrocode}
-%
-%    Identification, and additional reporting function, for compatibility with
-%    the original |report()| function and associated data structure.
-%
-%    \begin{macrocode}
+
 local err, warn, info, log = luatexbase.provides_module({
     name          = "luamplib",
     version       =  2.00,
-    date          = "2013/05/09",
+    date          = "2013/05/07",
     description   = "Lua package to typeset Metapost with LuaTeX's MPLib.",
 })
+
+
 %    \end{macrocode}
-%
-%    A few helpers, taken from |l-file.lua|.
+%    This module is a stripped down version of libraries that are used by
+%    \ConTeXt. Provide a few ``shortcuts'' expected by the imported code.
 %
 %    \begin{macrocode}
+
+local format, abs = string.format, math.abs
+
+local stringgsub    = string.gsub
+local stringfind    = string.find
+local stringmatch   = string.match
+local stringgmatch  = string.gmatch
+local tableconcat   = table.concat
+local texsprint     = tex.sprint
+
+local mplib = require ('mplib')
+local kpse  = require ('kpse')
+
 local file = file
 if not file then
-  file = { }
-  function file.replacesuffix(filename, suffix)
-      return (string.gsub(filename,"%.[%a%d]+$","")) .. "." .. suffix
-  end
-
-  function file.stripsuffix(filename)
-      return (string.gsub(filename,"%.[%a%d]+$",""))
-  end
-end
-
-local format, concat, abs, match = string.format, table.concat, math.abs, string.match
-local tex_sprint, string_gsub, string_gmatch = tex.sprint, string.gsub, string.gmatch
-local tex_count, tex_box = tex.count, tex.box
 
 %    \end{macrocode}
-%
 %    This is a small trick for \LaTeX . In \LaTeX\ we read the metapost code
 %    line by line, but it needs to be passed entirely to |process()|, so we
 %    simply add the lines in |data| and at the end we call |process(data)|.
 %
+%    A few helpers, taken from \verb|l-file.lua|.
+%
 %    \begin{macrocode}
-local data = ""
 
-local function resetdata()
-    data = ""
+  file = { }
+
+  function file.replacesuffix(filename, suffix)
+      return (stringgsub(filename,"%.[%a%d]+$","")) .. "." .. suffix
+  end
+
+  function file.stripsuffix(filename)
+      return (stringgsub(filename,"%.[%a%d]+$",""))
+  end
 end
-luamplib.resetdata = resetdata
-local function addline(line)
-    data = data .. '\n' .. line
-end
-luamplib.addline = addline
-local function processlines()
-    luamplib.settexboxes(data)
-    data = luamplib.gettexboxes(data)
-    luamplib.process(data)
-    resetdata()
-end
-luamplib.processlines = processlines
 %    \end{macrocode}
-%
-%    As the finder function for |mplib|, use the |kpse| library and
-%    make it behave like as if MetaPost was used (or almost, since the engine
-%    name is not set this way---not sure if this is a problem).
+%      As the finder function for |mplib|, use the |kpse| library and
+%      make it behave like as if MetaPost was used (or almost, since the engine
+%      name is not set this way---not sure if this is a problem).
 %
 %    \begin{macrocode}
+
 local mpkpse = kpse.new("luatex", "mpost")
 
 local function finder(name, mode, ftype)
@@ -293,108 +285,25 @@ local function finder(name, mode, ftype)
     end
 end
 luamplib.finder = finder
+
 %    \end{macrocode}
-%
-%    Default format name, and a public function to change it.
+% The rest of this module is not documented. More info can be found in the
+% \LuaTeX{} manual, articles in user group journals and the files that
+% ship with \ConTeXt.
 %
 %    \begin{macrocode}
-local currentformat = "plain"
 
-local function setformat (name) --- used in .sty
-    currentformat = name
+function luamplib.resetlastlog()
+    luamplib.lastlog = ""
 end
-luamplib.setformat = setformat
-%    \end{macrocode}
-%
-%    Create a new mplib object and input the correct .mp file as given by
-%    |currentformat|. With older versions of MetaPost, using a |mem| file may
-%    be more efficient, but newer versions don't support it any more so for
-%    the sake of simplicity, don't even try to use a |mem| file.
-%    |ini_version| is ignored by new versions but is useful to prevent old
-%    ones from trying to load a |mem| file.
-%
-%    \begin{macrocode}
-function load()
-    local mpx = mplib.new {
-        find_file   = finder,
-        ini_version = true,
-    }
-    mpx:execute(format("input %s ;", currentformat))
-    return mpx
-end
-%    \end{macrocode}
-%
-%    This code is provided by Kim Dohyun.
-%
-%    \begin{macrocode}
-local mplibcodepreamble = [[
-vardef textext@#(expr n, w, h, d) =
-	image(
-		addto currentpicture doublepath unitsquare
-		xscaled w
-		yscaled (h+d)
-		withprescript "%%textext:"&decimal n&":"&decimal w&":"&decimal(h+d);
-	)
-enddef;
-]]
-
-local factor = 65536*(7227/7200)
-
-local function settexboxes (data)
-    local i = tex_count[14] -- newbox register (hardcoded in plain and LaTeX format)
-    for _,c,_ in string_gmatch(data,"(%A)btex(%A.-%A)etex(%A)") do
-        i = i + 1
-        c = string_gsub(c,"^%s*(.-)%s*$","%1")
-        tex_sprint(format("\\setbox%i\\hbox{%s}",i,c))
-    end
-end
-luamplib.settexboxes = settexboxes
-
-local function gettexboxes (data)
-    local i = tex_count[14] -- the same newbox register
-    data = string_gsub(data,"(%A)btex%A.-%Aetex(%A)",
-    function(pre,post)
-        i = i + 1
-        local box = tex_box[i]
-        local boxmetr = format("textext(%i,%f,%f,%f)",
-            i,
-            box and (box.width/factor) or 0,
-            box and (box.height/factor) or 0,
-            box and (box.depth/factor) or 0)
-		    return pre .. boxmetr .. post
-    end)
-    return mplibcodepreamble .. data
-end
-luamplib.gettexboxes = gettexboxes
-
-local function puttexboxes (object)
-    local n,tw,th = match(object.prescript, "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
-    if n and tw and th then
-        local op = object.path
-        local first, second, fourth = op[1], op[2], op[4]
-        local tx, ty = first.x_coord, first.y_coord
-        local sx, sy = (second.x_coord - tx)/tw, (fourth.y_coord - ty)/th
-        local rx, ry = (second.y_coord - ty)/tw, (fourth.x_coord - tx)/th
-        if sx == 0 then sx = 0.00001 end
-        if sy == 0 then sy = 0.00001 end
-        luamplib.pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
-        tex_sprint(format("\\mplibputtextbox{%i}",n))
-        luamplib.pdf_literalcode("Q")
-    end
-end
-luamplib.puttexboxes = puttexboxes
 
 %    \end{macrocode}
-%
-%    The rest of this module is not documented. More information can be found
-%    in the \LuaTeX\ manual, articles in user group journals and the files
-%    that ship with \ConTeXt .
-%
-%    Below included is section that defines fallbacks for older versions of 
-%    mplib.
+% Below included is section that defines fallbacks for older
+% versions of mplib.
 %
 %    \begin{macrocode}
 local mplibone = tonumber(mplib.version()) <= 1.50
+
 if mplibone then
 
     luamplib.make = luamplib.make or function(name,mem_name,dump)
@@ -434,9 +343,9 @@ if mplibone then
     end
 
 else
+
 %    \end{macrocode}
-%
-%    These are the versions called with sufficiently recent mplib.
+% These are the versions called with sufficiently recent mplib.
 %
 %    \begin{macrocode}
 
@@ -465,6 +374,14 @@ else
     end
 
 end
+
+local currentformat = "plain"
+
+local function setformat (name) --- used in .sty
+    currentformat = name
+end
+luamplib.setformat = setformat
+
 
 luamplib.reporterror = function (result)
     if not result then
@@ -525,27 +442,29 @@ local function convert(result, flusher)
     return true -- done
 end
 luamplib.convert = convert
-%    \end{macrocode}
-%
-%    Some formats here have been passed by Kim from |%s| to |%f|.
-%
-%    \begin{macrocode}
+
 local function pdf_startfigure(n,llx,lly,urx,ury)
-    tex_sprint(format("\\mplibstarttoPDF{%f}{%f}{%f}{%f}",llx,lly,urx,ury))
+%    \end{macrocode}
+%     The following line has been slightly modified by Kim.
+%    \begin{macrocode}
+    texsprint(format("\\mplibstarttoPDF{%f}{%f}{%f}{%f}",llx,lly,urx,ury))
 end
 
 local function pdf_stopfigure()
-    tex_sprint("\\mplibstoptoPDF")
+    texsprint("\\mplibstoptoPDF")
 end
 
 local function pdf_literalcode(fmt,...) -- table
-    tex_sprint(format("\\mplibtoPDF{%s}",format(fmt,...)))
+    texsprint(format("\\mplibtoPDF{%s}",format(fmt,...)))
 end
 luamplib.pdf_literalcode = pdf_literalcode
 
 local function pdf_textfigure(font,size,text,width,height,depth)
     text = text:gsub(".","\\hbox{%1}") -- kerning happens in metapost
-    tex_sprint(format("\\mplibtextext{%s}{%f}{%s}{%s}{%f}",font,size,text,0,-( 7200/ 7227)/65536*depth))
+%    \end{macrocode}
+%     The following line has been slightly modified by Kim.
+%    \begin{macrocode}
+    texsprint(format("\\mplibtextext{%s}{%f}{%s}{%s}{%f}",font,size,text,0,-( 7200/ 7227)/65536*depth))
 end
 luamplib.pdf_textfigure = pdf_textfigure
 
@@ -636,6 +555,77 @@ local function flushconcatpath(path,open)
     return t
 end
 
+%    \end{macrocode}
+%     Below code has been contributed by Dohyun Kim.
+%     It implements \verb|btex| / \verb|etex| functions.
+%
+%    \begin{macrocode}
+
+local mplibcodepreamble = [[
+vardef textext@#(expr n, w, h, d) =
+    image(
+        addto currentpicture doublepath unitsquare
+        xscaled w
+        yscaled (h+d)
+        withprescript "%%textext:"&decimal n&":"&decimal w&":"&decimal(h+d);
+    )
+enddef;
+]]
+
+local factor = 65536*(7227/7200)
+
+local function settexboxes (data)
+    local i = tex.count[14] -- newbox register
+    for _,c,_ in stringgmatch(data,"(%A)btex(%A.-%A)etex(%A)") do
+        i = i + 1
+        c = stringgsub(c,"^%s*(.-)%s*$","%1")
+        texsprint(format("\\setbox%i\\hbox{%s}",i,c))
+    end
+end
+
+luamplib.settexboxes = settexboxes
+
+local function gettexboxes (data)
+    local i = tex.count[14] -- the same newbox register
+    data = stringgsub(data,"(%A)btex%A.-%Aetex(%A)",
+    function(pre,post)
+        i = i + 1
+        local box = tex.box[i]
+        local boxmetr = format("textext(%i,%f,%f,%f)",
+                        i,
+                        box and (box.width/factor) or 0,
+                        box and (box.height/factor) or 0,
+                        box and (box.depth/factor) or 0)
+        return pre .. boxmetr .. post
+    end)
+    return mplibcodepreamble .. data
+end
+
+luamplib.gettexboxes = gettexboxes
+
+local function puttexboxes (object)
+    local n,tw,th = stringmatch(
+                    object.prescript,
+                    "%%%%textext:(%d+):([%d%.%+%-]+):([%d%.%+%-]+)")
+    if n and tw and th then
+        local op = object.path
+        local first, second, fourth = op[1], op[2], op[4]
+        local tx, ty = first.x_coord, first.y_coord
+        local sx, sy = (second.x_coord - tx)/tw, (fourth.y_coord - ty)/th
+        local rx, ry = (second.y_coord - ty)/tw, (fourth.x_coord - tx)/th
+        if sx == 0 then sx = 0.00001 end
+        if sy == 0 then sy = 0.00001 end
+        pdf_literalcode("q %f %f %f %f %f %f cm",sx,rx,ry,sy,tx,ty)
+        texsprint(format("\\mplibputtextbox{%i}",n))
+        pdf_literalcode("Q")
+    end
+end
+
+%    \end{macrocode}
+%     End of \verb|btex| -- \verb|etex| patch.
+%
+%    \begin{macrocode}
+
 local function flush(result,flusher)
     if result then
         local figures = result.fig
@@ -644,7 +634,7 @@ local function flush(result,flusher)
                 info("flushing figure %s",f)
                 local figure = figures[f]
                 local objects = getobjects(result,figure,f)
-                local fignum = tonumber(match(figure:filename(),"([%d]+)$") or figure:charcode() or 0)
+                local fignum = tonumber(stringmatch(figure:filename(),"([%d]+)$") or figure:charcode() or 0)
                 local miterlimit, linecap, linejoin, dashed = -1, -1, -1, false
                 local bbox = figure:boundingbox()
                 local llx, lly, urx, ury = bbox[1], bbox[2], bbox[3], bbox[4] -- faster than unpack
@@ -657,16 +647,16 @@ local function flush(result,flusher)
                     pdf_literalcode("q")
                     if objects then
                         for o=1,#objects do
-                            local object = objects[o]
-                            local objecttype = object.type
-                            local prescript = object.prescript
+                            local object        = objects[o]
+                            local objecttype    = object.type
 %    \end{macrocode}
-%
-%    The three following lines are for btex...etex, by Kim.
+%     Change from \ConTeXt{} code: the following 3 lines are part of the
+%     |btex...etex| patch.
 %
 %    \begin{macrocode}
-                            if prescript and string.find(prescript,"%%%%textext:") then
-                                puttexboxes(object)
+                            local prescript     = object.prescript --- [be]tex patch
+                            if prescript and stringfind(prescript,"%%%%textext:") then
+                               puttexboxes(object)
                             elseif objecttype == "start_bounds" or objecttype == "stop_bounds" then
                                 -- skip
                             elseif objecttype == "start_clip" then
@@ -685,14 +675,13 @@ local function flush(result,flusher)
                                 pdf_literalcode("Q")
                             else
                                 local cs = object.color
-                                local cr = nil
-                                if cs and #cs > 0 then
 %    \end{macrocode}
-%
-%    The three following lines are for btex...etex, by Kim (does the cr thing
-%    really do something?)
+%     Change from \ConTeXt{} code: the following 5 lines are part of the
+%     |btex...etex| patch.
 %
 %    \begin{macrocode}
+                                local cr = nil
+                                if cs and #cs > 0 then
                                     local start,stop = luamplib.colorconverter(cs)
                                     pdf_literalcode(start)
                                     cr = stop
@@ -714,7 +703,7 @@ local function flush(result,flusher)
                                 end
                                 local dl = object.dash
                                 if dl then
-                                    local d = format("[%s] %i d",concat(dl.dashes or {}," "),dl.offset)
+                                    local d = format("[%s] %i d",tableconcat(dl.dashes or {}," "),dl.offset)
                                     if d ~= dashed then
                                         dashed = d
                                         pdf_literalcode(dashed)
@@ -810,9 +799,9 @@ end
 luamplib.colorconverter = colorconverter
 %    \end{macrocode}
 %
-%    \begin{macrocode}
+% \iffalse
 %</lua>
-%    \end{macrocode}
+% \fi
 %
 %    \subsection{\texorpdfstring{\TeX}{TeX} package}
 %
@@ -826,13 +815,11 @@ luamplib.colorconverter = colorconverter
 \bgroup\expandafter\expandafter\expandafter\egroup
 \expandafter\ifx\csname ProvidesPackage\endcsname\relax
   \input luatexbase-modutils.sty
-  \input pdftexcmds.sty
 \else
   \NeedsTeXFormat{LaTeX2e}
   \ProvidesPackage{luamplib}
-    [2011/12/09 v1.09 mplib package for LuaTeX]
+    [2013/05/07 v2.0 mplib package for LuaTeX]
   \RequirePackage{luatexbase-modutils}
-  \RequirePackage{fancyvrb}
   \RequirePackage{pdftexcmds}
 \fi
 %    \end{macrocode}
@@ -867,36 +854,34 @@ luamplib.colorconverter = colorconverter
       \PackageWarning{mplib}{MPLib only works in PDF mode, no figure will be output.}
     \fi
 \fi
+\def\mplibsetupcatcodes{%
+  \catcode`\{=12 \catcode`\}=12 \catcode`\#=12
+  \catcode`\^=12 \catcode`\~=12 \catcode`\_=12
+  %catcode`\%=12 %% don’t in Plain!
+  \catcode`\&=12 \catcode`\$=12
+}
 %    \end{macrocode}
 %
 %    The Plain-specific stuff.
 %
 %    \begin{macrocode}
-\def\mplibsetupcatcodes{%
-  \catcode`\{=12 % could be optional .. not really needed
-  \catcode`\}=12 % could be optional .. not really needed
-  \catcode`\#=12 %
-  \catcode`\^=12 %
-  \catcode`\~=12 %
-  \catcode`\_=12 %
-  %\catcode`\%=12 %% please look into this! /phg
-  \catcode`\&=12 %
-  \catcode`\$=12 %
-}
+\def\mplibputtextbox#1{\vbox to 0pt{\vss\hbox to 0pt{\raise\dp#1\box#1\hss}}}
 \bgroup\expandafter\expandafter\expandafter\egroup
 \expandafter\ifx\csname ProvidesPackage\endcsname\relax
-
 \def\mplibcode{%
-  \bgroup %
-  \mplibsetupcatcodes %
+  \bgroup
+  \mplibsetupcatcodes
   \mplibdocode %
 }
 \long\def\mplibdocode#1\endmplibcode{%
-  \egroup %
-  \mplibprocess{#1}%
-}
-\long\def\mplibprocess#1{%
-  \directlua{luamplib.process("\luatexluaescapestring{#1}")}%
+  \egroup
+  \directlua{
+    luamplib.settexboxes([===[\unexpanded{#1}]===])
+  }%
+  \directlua{
+    local data = luamplib.gettexboxes([===[\unexpanded{#1}]===])
+    luamplib.process(data)
+  }%
 }
 \else
 %    \end{macrocode}
@@ -922,54 +907,34 @@ luamplib.colorconverter = colorconverter
 \endgroup
 %    \end{macrocode}
 %
-%    In \LaTeX\ (it's not the case in plain\TeX ), we get the metapost code
-%    line by line, here is the function handling a line.
+%    The \LaTeX\ environment.
 %
 %    \begin{macrocode}
-\newcommand\mplibaddlines[1]{%
-  \begingroup %
-  \FV@hack %
-  \def\FV@ProcessLine##1{%
-    \directlua{luamplib.addline("\luatexluaescapestring{##1}")}%
-  }%
-  \csname FV@SV@#1\endcsname %
-  \endgroup %
+\newenvironment{mplibcode}{\toks@{}\ltxdomplibcode}{}
+\def\ltxdomplibcode{%
+  \bgroup
+  \mplibsetupcatcodes
+  \ltxdomplibcodeindeed %
 }
-%    \end{macrocode}
 %
-%    The \LaTeX\ environment is a modified \texttt{verbatim} environment.
+\long\def\ltxdomplibcodeindeed#1\end{%
+  \egroup
+  \toks@\expandafter{\the\toks@#1}\ltxdomplibcodefinally%
+}%
 %
-%    \begin{macrocode}
-\newenvironment{mplibcode}{%
-  \VerbatimEnvironment %
-  \begin{SaveVerbatim}{memoire}%
-}{%
-  \end{SaveVerbatim}%
-  \mplibaddlines{memoire}%
-  \directlua{luamplib.processlines()}%
+\def\ltxdomplibcodefinally#1{%
+  \ifnum\pdf@strcmp{#1}{mplibcode}=\z@
+    \directlua{luamplib.settexboxes([===[\the\toks@]===])}%
+    \directlua{
+      local data = luamplib.gettexboxes([===[\the\toks@]===])
+      luamplib.process(data)
+    }%
+    \end{mplibcode}%
+  \else
+    \toks@\expandafter{\the\toks@\end{#1}}\expandafter\ltxdomplibcode
+ \fi%
 }
-
-%  \newenvironment{mplibcode}{\toks@{}\ltxdomplibcode}{}
-%  \def\ltxdomplibcode{\bgroup\mplibsetupcatcodes\ltxdomplibcodeX}
-%  \long\def\ltxdomplibcodeX#1\end{%
-%    \egroup
-%    \toks@\expandafter{\the\toks@#1}\ltxdomplibcodeXX}
-%    \def\ltxdomplibcodeXX#1{%
-%      \ifnum\pdf@strcmp{#1}{mplibcode}=\z@
-%	\directlua{luamplib.settexboxes([===[\the\toks@]===])}
-%	\directlua{local data = luamplib.gettexboxes([===[\the\toks@]===])
-%		   luamplib.process(data)}\end{mplibcode}%
-%      \else
-%	\toks@\expandafter{\the\toks@\end{#1}}\expandafter\ltxdomplibcode
-%      \fi}
-
 \fi
-%    \end{macrocode}
-%
-%    A new function (by Kim).
-%
-%    \begin{macrocode}
-\def\mplibputtextbox#1{\vbox to 0pt{\vss\hbox to 0pt{\raise\dp#1\box#1\hss}}}
 %    \end{macrocode}
 %
 %    We use a dedicated scratchbox.
@@ -982,7 +947,7 @@ luamplib.colorconverter = colorconverter
 %
 %    \begin{macrocode}
 \def\mplibstarttoPDF#1#2#3#4{%
-  \hbox\bgroup %
+  \hbox\bgroup
   \xdef\MPllx{#1}\xdef\MPlly{#2}%
   \xdef\MPurx{#3}\xdef\MPury{#4}%
   \xdef\MPwidth{\the\dimexpr#3bp-#1bp\relax}%
@@ -991,8 +956,8 @@ luamplib.colorconverter = colorconverter
   \leftskip0pt%
   \parindent0pt%
   \everypar{}%
-  \setbox\mplibscratchbox\vbox\bgroup %
-  \noindent %
+  \setbox\mplibscratchbox\vbox\bgroup
+  \noindent
 }
 %    \end{macrocode}
 %
@@ -1003,17 +968,17 @@ luamplib.colorconverter = colorconverter
     {\hskip-\MPllx bp%
      \raise-\MPlly bp%
      \box\mplibscratchbox}%
-  \setbox\mplibscratchbox\vbox to \MPheight %
-    {\vfill %
-     \hsize\MPwidth %
+  \setbox\mplibscratchbox\vbox to \MPheight
+    {\vfill
+     \hsize\MPwidth
      \wd\mplibscratchbox0pt%
      \ht\mplibscratchbox0pt%
      \dp\mplibscratchbox0pt%
      \box\mplibscratchbox}%
-  \wd\mplibscratchbox\MPwidth %
-  \ht\mplibscratchbox\MPheight %
-  \box\mplibscratchbox %
-  \egroup %
+  \wd\mplibscratchbox\MPwidth
+  \ht\mplibscratchbox\MPheight
+  \box\mplibscratchbox
+  \egroup
 }
 %    \end{macrocode}
 %
@@ -1021,20 +986,20 @@ luamplib.colorconverter = colorconverter
 %
 %    \begin{macrocode}
 \def\mplibtextext#1#2#3#4#5{%
-  \begingroup %
-  \setbox\mplibscratchbox\hbox %
+  \begingroup
+  \setbox\mplibscratchbox\hbox
     {\font\temp=#1 at #2bp%
-     \temp %
+     \temp
      #3}%
-  \setbox\mplibscratchbox\hbox %
+  \setbox\mplibscratchbox\hbox
     {\hskip#4 bp%
      \raise#5 bp%
      \box\mplibscratchbox}%
   \wd\mplibscratchbox0pt%
   \ht\mplibscratchbox0pt%
   \dp\mplibscratchbox0pt%
-  \box\mplibscratchbox %
-  \endgroup %
+  \box\mplibscratchbox
+  \endgroup
 }
 %    \end{macrocode}
 %

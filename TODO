@@ -1,5 +1,3 @@
-- use own verbatim env for LaTeX (à la luacode)
-    yep, will be much better than working arround fancyvrb
 - make variants of mplibcode with \ { } still special?
     - actually, also make commands not changing the catcode as requested by
       Arno T.
